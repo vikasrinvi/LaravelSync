@@ -23,7 +23,7 @@ class SyncController extends Controller
         $dropboxClient = new Client([
             'base_uri' => 'https://api.dropboxapi.com/2/',
             'headers' => [
-                'Authorization' => 'Bearer sl.BgvBPd1IN2lFlkAA4GNAbl0ORwVvDFHaYPmxAyZzpuCo-yPkjIyFErQHOohFDfBGPLvcnMA4SikWY71uWiDtviMVD9iBPRVeEedlnrWAozuTE2uzegDI762eQ_6AI7HpC1pH9_YZHJtC',
+                'Authorization' => "Bearer " . config('dropbox.accessToken'),
                 'Content-Type' => 'application/json',
             ],
         ]);
@@ -42,7 +42,8 @@ class SyncController extends Controller
         $files = $body['entries'];
 
         // Find the top-level folder (assuming it's the first folder in the list)
-        return $files[0]['path_display'];
+        $path = isset($files[0]) ? isset($files[0]['path_display']) ? $files[0]['path_display'] : '' : '';
+        return $path;
     }
 
     public function syncGoogleFolders()
@@ -53,7 +54,7 @@ class SyncController extends Controller
         // Sync the folders
         // $this->syncFilesGoogleDrive($googleDriveFolder, $dropboxFolder);
         $this->syncFilesDropBox($dropboxFolder, $googleDriveFolder);
-        return redirect()->back();
+       return redirect()->back()->with('message', "Google Drive has been sync");
     }
 
      public function syncDropBoxFolders()
@@ -64,6 +65,7 @@ class SyncController extends Controller
         // Sync the folders
         $this->syncFilesGoogleDrive($googleDriveFolder, $dropboxFolder);
         // $this->syncFilesDropBox($dropboxFolder, $googleDriveFolder);
+        return redirect()->back()->with('message', "Drop box has been sync");
     }
 
     private function getGoogleDriveTopFolder()
@@ -73,7 +75,8 @@ class SyncController extends Controller
         $files = $drive->allFiles();
 
         // Find the top-level folder (assuming it's the first folder in the list)
-        return $files[0];
+        $path = isset($files[0]) ? $files[0] : '';
+        return $path;
     }
 
 
@@ -93,8 +96,35 @@ class SyncController extends Controller
                 // File doesn't exist in the destination, so upload it
                 $fileContents = Storage::disk('google')->get($sourceFile);
                 Storage::disk('dropbox')->put($destinationFile, $fileContents);
+                }
+        }
+                        // Fetch files in the destination folder
+        $destinationFiles = Storage::disk('dropbox')->allFiles('');
+
+        foreach ($destinationFiles as $destinationFile) {
+            // Determine the corresponding file path in the source folder
+            $sourceFile = str_replace($destinationFolder, $sourceFolder, $destinationFile);
+
+            // Check if the file exists in the source folder
+            if (!Storage::disk('google')->exists($sourceFile)) {
+                // File doesn't exist in the source, so delete it from the destination
+                Storage::disk('dropbox')->delete($destinationFile);
+            } else {
+                // File exists in the destination, check if the content needs to be updated
+                $sourceContents = Storage::disk('google')->get($sourceFile);
+                $destinationContents = Storage::disk('dropbox')->get($destinationFile);
+
+                if ($sourceContents !== $destinationContents) {
+                    if(!$sourceContents){
+                        continue;
+                    }
+                    // Content is different, update the file in the destination
+                    Storage::disk('dropbox')->put($destinationFile, $sourceContents);
+                }
             }
         }
+
+
     }
     private function syncFilesDropBox($sourceFolder, $destinationFolder)
     {
@@ -112,5 +142,34 @@ class SyncController extends Controller
                 Storage::disk('google')->put($destinationFile, $fileContents);
             }
         }
+                        // Fetch files in the destination folder
+        $destinationFiles = Storage::disk('google')->allFiles('');
+
+        foreach ($destinationFiles as $destinationFile) {
+            // Determine the corresponding file path in the source folder
+            $sourceFile = str_replace($destinationFolder, $sourceFolder, $destinationFile);
+
+            // Check if the file exists in the source folder
+            if (!Storage::disk('dropbox')->exists($sourceFile)) {
+                // File doesn't exist in the source, so delete it from the destination
+                Storage::disk('google')->delete($destinationFile);
+            } else {
+                // File exists in the destination, check if the content needs to be updated
+
+                $sourceContents = Storage::disk('dropbox')->get($sourceFile);
+                $destinationContents = Storage::disk('google')->get($destinationFile);
+
+                if ($sourceContents !== $destinationContents) {
+                    // Content is different, update the file in the destination
+
+                    if(!$sourceContents){
+                        continue;
+                    }
+                    Storage::disk('google')->put($destinationFile, $sourceContents);
+                }
+            }
+        }
+
+
     }
 }
