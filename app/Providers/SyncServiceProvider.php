@@ -45,7 +45,6 @@ class SyncServiceProvider extends ServiceProvider
                 return new \Illuminate\Filesystem\FilesystemAdapter($driver, $adapter);
             });
         } catch(\Exception $e) {
-            // your exception handling logic
         }
 
         try {
